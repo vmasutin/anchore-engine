@@ -79,6 +79,24 @@ class MetadataNotFound(Exception):
     pass
 
 
+class ImageConflict(Exception):
+
+    def __init__(self, msg, detail=None):
+        self.msg = msg
+        self.detail = detail
+
+    def __str__(self):
+        return str(self.to_json())
+
+    def to_json(self):
+        e_dict = dict()
+        e_dict['httpcode'] = 409
+        e_dict['message'] = self.msg
+        e_dict['detail'] = self.detail
+
+        return json.dumps(e_dict)
+
+
 class ObjectStoreLocation(JsonMappedMixin):
     class ObjectStoreLocationV1Schema(JitSchema):
         bucket = fields.Str()
@@ -716,7 +734,7 @@ class RestoreArchivedImageTask(object):
         with session_scope() as session:
             if db_catalog_image.get(self.image_digest, self.account, session):
                 logger.info('Image archive restore found existing image records already. Aborting restore.')
-                raise Exception('Conflict: Image already exists in system. No restore possible')
+                raise ImageConflict('Conflict: Image already exists in system. No restore possible')
 
             rec = db_archived_images.get(session, self.account, self.image_digest)
             if not rec:
@@ -844,7 +862,7 @@ class RestoreArchivedImageTaskFromArchiveTarfile(RestoreArchivedImageTask):
         with session_scope() as session:
             if db_catalog_image.get(self.image_digest, self.account, session):
                 logger.info('Image archive restore found existing image records already. Aborting restore.')
-                raise Exception('Conflict: Image already exists in system. No restore possible')
+                raise ImageConflict('Conflict: Image already exists in system. No restore possible')
 
         dest_obj_mgr = object_store.get_manager()
 
