@@ -86,15 +86,11 @@ class ImageConflict(Exception):
         self.detail = detail
 
     def __str__(self):
-        return str(self.to_json())
-
-    def to_json(self):
-        e_dict = dict()
-        e_dict['httpcode'] = 409
-        e_dict['message'] = self.msg
-        e_dict['detail'] = self.detail
-
-        return json.dumps(e_dict)
+        return str(json.dumps({
+            'httpcode': 409,
+            'message': self.msg,
+            'detail': self.detail
+        }))
 
 
 class ObjectStoreLocation(JsonMappedMixin):
