@@ -31,8 +31,8 @@ def make_response_error(errmsg, in_httpcode=None, details=None):
         if 'anchore_error_json' in errmsg.__dict__:
             # Try to load it as json
             try:
-                err_json = json.loads(errmsg.__dict__['anchore_error_json'])
-            except:
+                err_json = json.loads(errmsg.__dict__.get('anchore_error_json', None))
+            except ValueError:
                 # Then it may just be a string, we cannot do anything with it
                 logger.debug('Failed to parse anchore_error_json as json')
                 return ret
@@ -45,11 +45,8 @@ def make_response_error(errmsg, in_httpcode=None, details=None):
                     if 'error_codes' not in ret['detail']:
                         ret['detail']['error_codes'] = []
                     ret['detail']['error_codes'].append(err_json.get('error_code'))
-            except:
-                try:
-                    logger.warn("unable to marshal error details: source error {}".format(errmsg.__dict__))
-                except:
-                    pass
+            except KeyError:
+                logger.warn("unable to marshal error details: source error {}".format(errmsg.__dict__))
     return ret
 
 
