@@ -26,7 +26,6 @@ log_level_map = {
     'SPEW': 99
 }
 log_level = None  # int level for logging
-_test_flag = False
 
 
 def enable_test_logging(level='WARN', outfile=None):
@@ -228,16 +227,16 @@ def configure_logging(new_log_level, enable_json_logging=False, log_beginner=Non
 
     if log_beginner:
         if enable_json_logging:
-            observer = anchore_json_log_observer(sys.stdout)
+            observer = anchore_json_log_observer()
         else:
             observer = textFileLogObserver(sys.stdout)
         log_beginner.beginLoggingTo([observer])
         _msg('Logging Configured!')
 
 
-def anchore_json_log_observer(out_file: io.IOBase):
+def anchore_json_log_observer():
     return FileLogObserver(
-        out_file,
+        sys.stdout,
         lambda event: u"{0}{1}\n".format(u"\x1e", make_anchore_log_json(event))
     )
 
