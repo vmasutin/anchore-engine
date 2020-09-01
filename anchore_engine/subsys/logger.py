@@ -4,12 +4,11 @@ import io
 import json
 # Configure a standard python logger for stdout use during bootstrap
 import logging
-import os
 import sys
 import threading
 from functools import wraps
 
-from twisted.logger import globalLogPublisher, FileLogObserver, eventAsJSON, textFileLogObserver
+from twisted.logger import FileLogObserver, eventAsJSON, textFileLogObserver
 from twisted.python import log
 
 bootstrap_logger = None
@@ -27,13 +26,6 @@ log_level_map = {
     'SPEW': 99
 }
 log_level = None  # int level for logging
-_log_to_db = None
-_log_to_stdout = False
-
-# It's not preferable to use a global variable to manage this configuration, but this is currently how the logger is
-# controlled.
-# TODO: refactor this class to not use global variables for state management
-_json_logging_enabled = True
 _test_flag = False
 
 
@@ -130,29 +122,17 @@ def bootstrap_logger_intercept(level):
 
 
 def _msg(msg_string, msg_log_level='INFO'):
-    global log_level, log_level_map, _log_to_stdout, _log_to_db
+    global log_level, log_level_map
 
     if log_level is None:
         log_level = log_level_map['INFO']
 
     if log_level_map[msg_log_level] <= log_level:
-        tname, caller_file, caller_name = get_anchore_log_data()
-
         try:
             log.msg(msg_string)
         except Exception as err:
             import logging as py_logging
             py_logging.error("Failed to post log msg: {}".format(str(err)))
-
-        if _log_to_stdout:
-            sys.stderr.write(
-                "[{}] [{}/{}()] [{}] {} \n".format(str(tname), caller_file, caller_name, msg_log_level, msg_string))
-
-        if _log_to_db:
-            # only store logs of higher severity than WARN
-            if log_level_map[msg_log_level] < log_level_map['ERROR']:
-                # removing old event log stuff since there are no fatal messages in the system
-                pass
 
 
 def safe_formatter(message, args):
@@ -228,15 +208,17 @@ def fatal(msg_string):
     return _msg(msg_string, msg_log_level='FATAL')
 
 
-def configure_logging(new_log_level, log_to_stdout=False, log_to_db=False, enable_json_logging=False):
+def configure_logging(new_log_level, enable_json_logging=False, log_beginner=None):
     """
     Set log level for twisted logging
     :param new_log_level: a string name of log level, e.g. 'INFO', 'DEBUG'
-    :param log_to_stdout:
-    :param log_to_db:
+    :param enable_json_logging: whether to enable json logging or not
+    :param log_beginner: We can only call beginLoggingTo globally once. Since we have the anchore_manager and a bunch of
+                         Twistd processes, as logging is configured, the caller needs to provide their own beginner,
+                         which is easy enough.
     :return:
     """
-    global log_level, log_level_map, _log_to_stdout, _log_to_db, _json_logging_enabled
+    global log_level, log_level_map
 
     # Don't require the level strings to be upper, normalize it here
     new_log_level = new_log_level.upper()
@@ -244,29 +226,16 @@ def configure_logging(new_log_level, log_to_stdout=False, log_to_db=False, enabl
     if new_log_level in log_level_map:
         log_level = log_level_map[new_log_level]
 
-    _log_to_stdout = log_to_stdout
-    _log_to_db = log_to_db
-    _json_logging_enabled = enable_json_logging
-
-    log_file = get_log_file()
-    if _json_logging_enabled:
-        globalLogPublisher.addObserver(anchore_json_file_log_observer(io.open(log_file, 'a')))
-    else:
-        globalLogPublisher.addObserver(textFileLogObserver(io.open(log_file, 'a')))
-
-
-def get_log_file():
-    try:
-        if 'ANCHORE_LOGFILE' in os.environ:
-            log_file = os.environ['ANCHORE_LOGFILE']
+    if log_beginner:
+        if enable_json_logging:
+            observer = anchore_json_log_observer(sys.stdout)
         else:
-            log_file = "anchore-general.log"
-    except KeyError:
-        log_file = "anchore-general.log"
-    return log_file
+            observer = textFileLogObserver(sys.stdout)
+        log_beginner.beginLoggingTo([observer])
+        _msg('Logging Configured!')
 
 
-def anchore_json_file_log_observer(out_file: io.IOBase):
+def anchore_json_log_observer(out_file: io.IOBase):
     return FileLogObserver(
         out_file,
         lambda event: u"{0}{1}\n".format(u"\x1e", make_anchore_log_json(event))

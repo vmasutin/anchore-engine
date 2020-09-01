@@ -8,6 +8,8 @@ import json
 import os
 import sys
 import datetime
+import warnings
+
 from twisted import web
 from twisted.application import service
 from twisted.application.internet import TimerService, StreamServerEndpointService
@@ -15,6 +17,7 @@ from twisted.internet.endpoints import TCP4ServerEndpoint, SSL4ServerEndpoint
 
 from twisted.internet import ssl, reactor
 from twisted.internet.task import LoopingCall
+from twisted.logger import LogBeginner, LogPublisher
 from twisted.python import log
 from twisted.python import usage
 from twisted.web.resource import Resource
@@ -121,19 +124,17 @@ class WsgiApiServiceMaker(object):
         if self.global_configuration is None:
             log.err('No configuration found to initialize logging for. Expecting other errors, so setting log level to DEBUG')
             log_level = 'DEBUG'
-            log_to_db = False
             json_logging_enabled = False
         else:
             try:
                 service_config = self.global_configuration['services'][self.service_cls.__service_name__]
                 log_level = service_config.get('log_level', self.global_configuration.get('log_level', 'INFO'))
-                log_to_db = self.global_configuration.get('log_to_db', False)
                 json_logging_enabled = service_config.get('json_logging_enabled', self.global_configuration.get('json_logging_enabled', False))
             except Exception as err:
                 log.err("error checking for enabled services, check config file - exception: " + str(err))
                 raise Exception("error checking for enabled services, check config file - exception: " + str(err))
-
-        logger.configure_logging(log_level, log_to_db=log_to_db, enable_json_logging=json_logging_enabled)
+        log_beginner = LogBeginner(LogPublisher(), sys.stderr, sys, warnings)
+        logger.configure_logging(log_level, enable_json_logging=json_logging_enabled, log_beginner=log_beginner)
 
     def _check_enabled(self):
         if not self.global_configuration.get('services', {}).get(self.service_cls.__service_name__, {}).get('enabled', False):
@@ -269,7 +270,7 @@ class WsgiApiServiceMaker(object):
         root = rewrite.RewriterResource(self.root_resource, self._default_version_rewrite)
 
         # Build the main site server
-        site = server.Site(root)
+        site = server.Site(root, logPath=b'/var/log/anchore/access.log')
         listen = self.anchore_service.configuration['listen']
 
         # Disable the twisted access logging by overriding the log function as it uses a raw 'write' and cannot otherwise be disabled, iff enable_access_logging is set to False in either the service or global config
