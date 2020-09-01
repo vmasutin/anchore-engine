@@ -152,7 +152,7 @@ def startup_service(service, configdir):
         if os.path.exists(f):
             twistd_cmd = f
 
-    cmd = [twistd_cmd, '--logger=anchore_engine.subsys.twistd_logger.logger', '--pidfile', pidfile, "-n", service, '--config', configdir]
+    cmd = [twistd_cmd, '--pidfile', pidfile, "-n", service, '--config', configdir]
     logger.info("starting service: {}".format(str(service)))
     logger.info("\t {}".format(' '.join(cmd)))
 

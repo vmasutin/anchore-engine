@@ -1,22 +1,20 @@
-from connexion import request
-import copy
 import json
-import datetime
+
+from connexion import request
 
 # anchore modules
 import anchore_engine.apis
-from anchore_engine.apis.authorization import get_authorizer, ActionBoundPermission
-
+import anchore_engine.common
 import anchore_engine.common.helpers
+import anchore_engine.configuration.localconfig
+import anchore_engine.subsys.servicestatus
+from anchore_engine.apis.authorization import get_authorizer, ActionBoundPermission
+from anchore_engine.apis.context import ApiRequestContextProxy
 from anchore_engine.clients.services import internal_client_for
 from anchore_engine.clients.services.catalog import CatalogClient
 from anchore_engine.clients.services.policy_engine import PolicyEngineClient
-import anchore_engine.common
-import anchore_engine.subsys.servicestatus
-import anchore_engine.configuration.localconfig
-from anchore_engine.configuration.localconfig import GLOBAL_RESOURCE_DOMAIN
-from anchore_engine.apis.context import ApiRequestContextProxy
 from anchore_engine.common.errors import AnchoreError
+from anchore_engine.configuration.localconfig import GLOBAL_RESOURCE_DOMAIN
 
 authorizer = get_authorizer()
 

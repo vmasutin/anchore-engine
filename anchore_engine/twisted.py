@@ -122,16 +122,18 @@ class WsgiApiServiceMaker(object):
             log.err('No configuration found to initialize logging for. Expecting other errors, so setting log level to DEBUG')
             log_level = 'DEBUG'
             log_to_db = False
+            json_logging_enabled = False
         else:
             try:
                 service_config = self.global_configuration['services'][self.service_cls.__service_name__]
                 log_level = service_config.get('log_level', self.global_configuration.get('log_level', 'INFO'))
                 log_to_db = self.global_configuration.get('log_to_db', False)
+                json_logging_enabled = service_config.get('json_logging_enabled', self.global_configuration.get('json_logging_enabled', False))
             except Exception as err:
                 log.err("error checking for enabled services, check config file - exception: " + str(err))
                 raise Exception("error checking for enabled services, check config file - exception: " + str(err))
 
-        logger.set_log_level(log_level, log_to_db=log_to_db)
+        logger.configure_logging(log_level, log_to_db=log_to_db, enable_json_logging=json_logging_enabled)
 
     def _check_enabled(self):
         if not self.global_configuration.get('services', {}).get(self.service_cls.__service_name__, {}).get('enabled', False):

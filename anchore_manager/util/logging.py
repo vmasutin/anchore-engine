@@ -68,7 +68,7 @@ def log_config(config: dict):
         if config['debug']:
             log_level = 'DEBUG'
 
-        logger.set_log_level(log_level, log_to_stdout=True)
+        logger.configure_logging(log_level, log_to_stdout=True)
 
     except Exception as err:
         logger.error(format_error_output(config, 'service', {}, err))

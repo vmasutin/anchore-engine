@@ -1,11 +1,16 @@
+import datetime
 import inspect
-import sys
-import threading
-from twisted.python import log
-from functools import wraps
-
+import io
+import json
 # Configure a standard python logger for stdout use during bootstrap
 import logging
+import os
+import sys
+import threading
+from functools import wraps
+
+from twisted.logger import globalLogPublisher, FileLogObserver, eventAsJSON, textFileLogObserver
+from twisted.python import log
 
 bootstrap_logger = None
 bootstrap_logger_enabled = False
@@ -24,6 +29,12 @@ log_level_map = {
 log_level = None  # int level for logging
 _log_to_db = None
 _log_to_stdout = False
+
+# It's not preferable to use a global variable to manage this configuration, but this is currently how the logger is
+# controlled.
+# TODO: refactor this class to not use global variables for state management
+_json_logging_enabled = True
+_test_flag = False
 
 
 def enable_test_logging(level='WARN', outfile=None):
@@ -69,7 +80,7 @@ def enable_bootstrap_logging(service_name=None):
     Turn on the bootstrap logger, which provides basic stdout logs until the
     main twisted logger is online and ready.
 
-    :param name_prefix:
+    :param service_name:
     :return:
     """
     global bootstrap_logger_enabled, bootstrap_logger, log_level
@@ -125,25 +136,17 @@ def _msg(msg_string, msg_log_level='INFO'):
         log_level = log_level_map['INFO']
 
     if log_level_map[msg_log_level] <= log_level:
-        tname = threading.current_thread().getName()
-        caller_file = "-"
-        caller_name = "-"
+        tname, caller_file, caller_name = get_anchore_log_data()
+
         try:
-            current_frame = inspect.currentframe()
-            outer_frame = inspect.getouterframes(current_frame, 3)
-            frame = inspect.stack()[3]
-            module = inspect.getmodule(frame[0])
-            caller_file = module.__name__
-            caller_name = outer_frame[3][3]
-        except Exception:
-            pass
-
-        themsg = "[" + caller_file + "/" + caller_name + "()] [" + msg_log_level + "] " + msg_string
-
-        log.msg("[" + str(tname) + "] " + themsg)
+            log.msg(msg_string)
+        except Exception as err:
+            import logging as py_logging
+            py_logging.error("Failed to post log msg: {}".format(str(err)))
 
         if _log_to_stdout:
-            sys.stderr.write("[" + str(tname) + "] " + themsg + '\n')
+            sys.stderr.write(
+                "[{}] [{}/{}()] [{}] {} \n".format(str(tname), caller_file, caller_name, msg_log_level, msg_string))
 
         if _log_to_db:
             # only store logs of higher severity than WARN
@@ -225,7 +228,7 @@ def fatal(msg_string):
     return _msg(msg_string, msg_log_level='FATAL')
 
 
-def set_log_level(new_log_level, log_to_stdout=False, log_to_db=False):
+def configure_logging(new_log_level, log_to_stdout=False, log_to_db=False, enable_json_logging=False):
     """
     Set log level for twisted logging
     :param new_log_level: a string name of log level, e.g. 'INFO', 'DEBUG'
@@ -233,7 +236,7 @@ def set_log_level(new_log_level, log_to_stdout=False, log_to_db=False):
     :param log_to_db:
     :return:
     """
-    global log_level, log_level_map, _log_to_stdout, _log_to_db
+    global log_level, log_level_map, _log_to_stdout, _log_to_db, _json_logging_enabled
 
     # Don't require the level strings to be upper, normalize it here
     new_log_level = new_log_level.upper()
@@ -243,3 +246,57 @@ def set_log_level(new_log_level, log_to_stdout=False, log_to_db=False):
 
     _log_to_stdout = log_to_stdout
     _log_to_db = log_to_db
+    _json_logging_enabled = enable_json_logging
+
+    log_file = get_log_file()
+    if _json_logging_enabled:
+        globalLogPublisher.addObserver(anchore_json_file_log_observer(io.open(log_file, 'a')))
+    else:
+        globalLogPublisher.addObserver(textFileLogObserver(io.open(log_file, 'a')))
+
+
+def get_log_file():
+    try:
+        if 'ANCHORE_LOGFILE' in os.environ:
+            log_file = os.environ['ANCHORE_LOGFILE']
+        else:
+            log_file = "anchore-general.log"
+    except KeyError:
+        log_file = "anchore-general.log"
+    return log_file
+
+
+def anchore_json_file_log_observer(out_file: io.IOBase):
+    return FileLogObserver(
+        out_file,
+        lambda event: u"{0}{1}\n".format(u"\x1e", make_anchore_log_json(event))
+    )
+
+
+def get_anchore_log_data():
+    tname = threading.current_thread().getName()
+    caller_file = "-"
+    caller_name = "-"
+    try:
+        current_frame = inspect.currentframe()
+        outer_frame = inspect.getouterframes(current_frame, 3)
+        frame = inspect.stack()[3]
+        module = inspect.getmodule(frame[0])
+        caller_file = module.__name__
+        caller_name = outer_frame[3][3]
+    except Exception:
+        pass
+
+    return tname, caller_file, caller_name
+
+
+def make_anchore_log_json(event):
+    event_json = json.loads(eventAsJSON(event))
+    tname, caller_file, caller_name = get_anchore_log_data()
+    event_json['anchore_data'] = {
+        'thread': tname,
+        'file': caller_file,
+        'name': caller_name,
+        'time': datetime.datetime.now().strftime(DEFAULT_DATE_FORMAT)
+    }
+    return json.dumps(event_json)
