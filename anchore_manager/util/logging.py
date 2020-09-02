@@ -73,7 +73,7 @@ def log_config(config: dict):
         if config['debug']:
             log_level = 'DEBUG'
 
-        enable_json_logging = os.getenv('ANCHORE_JSON_LOGGING_ENABLED') == 'true'
+        enable_json_logging = os.getenv('ANCHORE_JSON_LOGGING_ENABLED', '') == 'true'
         log_beginner = LogBeginner(LogPublisher(), sys.stderr, sys, warnings)
         logger.configure_logging(log_level, enable_json_logging=enable_json_logging, log_beginner=log_beginner)
 

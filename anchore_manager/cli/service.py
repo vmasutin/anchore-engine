@@ -363,7 +363,7 @@ def start(services, no_auto_upgrade, anchore_module, skip_config_validate, skip_
                                 logger.info("restarting service: {}".format(service_thread.thread.name))
                                 service_thread.start()
             except Exception as err:
-                logger.error("Exception received during handling of auto restarting services: {}".format(str(err)))
+                logger.exception("Exception received during handling of auto restarting services")
                 raise err
 
     except Exception as err:
