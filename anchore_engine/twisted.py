@@ -38,7 +38,7 @@ enable_dangerous_debug_cli = False
 enable_thread_dumper = (os.getenv('ANCHORE_ENABLE_DANGEROUS_THREAD_DUMP_API', 'false').lower() == 'true')
 
 if enable_dangerous_debug_cli or enable_thread_dumper:
-    from twisted.application import internet, service
+    from twisted.application import internet
     from twisted.conch.insults import insults
     from twisted.conch.manhole import ColoredManhole
     from twisted.conch.telnet import TelnetTransport, TelnetBootstrapProtocol
@@ -183,8 +183,6 @@ class WsgiApiServiceMaker(object):
 
             self._check_enabled()
 
-            #logger.enable_bootstrap_logging(self.tapname)
-
             assert issubclass(self.service_cls, ApiService)
             self.anchore_service = self.service_cls(options=options)
             self.anchore_service.initialize(self.global_configuration)
@@ -270,24 +268,8 @@ class WsgiApiServiceMaker(object):
         root = rewrite.RewriterResource(self.root_resource, self._default_version_rewrite)
 
         # Build the main site server
-        site = server.Site(root, logPath=b'/var/log/anchore/access.log')
+        site = server.Site(root)
         listen = self.anchore_service.configuration['listen']
-
-        # Disable the twisted access logging by overriding the log function as it uses a raw 'write' and cannot otherwise be disabled, iff enable_access_logging is set to False in either the service or global config
-        try:
-            eal = True
-            if "enable_access_logging" in self.anchore_service.configuration:
-                eal = self.anchore_service.configuration.get("enable_access_logging", True)
-            elif "enable_access_logging" in self.configuration:
-                eal = self.configuration.get("enable_access_logging", True)
-
-            if not eal:
-                def _null_logger(request):
-                    pass
-                site.log = _null_logger
-
-        except:
-            pass
 
         if str(self.anchore_service.configuration.get('ssl_enable', '')).lower() == 'true':
             try:
